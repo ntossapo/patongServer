@@ -59,7 +59,7 @@ func getAccidentPosition(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 	dataOut, _ := json.Marshal(accident)
-	fmt.Println("Get Data Called from : ")
+	fmt.Println("Get Data Called from :")
 	fmt.Fprintf(w, "%s", string(dataOut))
 	
 }
