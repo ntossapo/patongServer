@@ -8,12 +8,13 @@ import(
 	"encoding/json"
 	"gopkg.in/mgo.v2"
     "gopkg.in/mgo.v2/bson"
+    "net"
 )
 
 type Accident struct{
 	Lat float64			`bson:"lat" json:"lat"`
 	Lng float64			`bson:"lng" json:"lng"`
-	Atype int64			`bson:"atype" json:"atype"`
+	Atype string			`bson:"atype" json:"atype"`
 	Name string			`bson:"name" json:"name"`
 	Tel string			`bson:"tel" json:"tel"`
 	Desc string			`bson:"desc" json:"desc"`
@@ -23,7 +24,7 @@ type Accident struct{
 func addAccidentPosition(w http.ResponseWriter, r *http.Request){
 	lat, _ := strconv.ParseFloat(r.FormValue("lat"), 32)
 	lng, _ := strconv.ParseFloat(r.FormValue("lng"), 32)
-	aType, _ := strconv.ParseInt(r.FormValue("aType"),0 , 8)
+	aType := r.FormValue("aType")
 	name := r.FormValue("name")
 	tel := r.FormValue("tel")
 	desc := r.FormValue("desc")
@@ -43,13 +44,14 @@ func addAccidentPosition(w http.ResponseWriter, r *http.Request){
 		log.Fatal(err)
 	}
 
-	fmt.Printf("add new accident \n{lat : %f, long : %f, aType : %d , name : \"%s\" , tel : \"%s\" , desc : \"%s\" dateTime : \"%s\"}", lat, lng, aType, name, tel, desc, dateTime)
+	fmt.Printf("add new accident \n{lat : %f, long : %f, aType : %d , name : \"%s\" , tel : \"%s\" , desc : \"%s\" dateTime : \"%s\"}\n", lat, lng, aType, name, tel, desc, dateTime)
 	bolResult, _ := json.Marshal(true)
 	fmt.Fprintf(w, "%s", string(bolResult))
 }
 
 func getAccidentPosition(w http.ResponseWriter, r *http.Request) {
 	var accident []Accident
+	ip ,_ ,_ := net.SplitHostPort(r.RemoteAddr)
 	session, err := mgo.Dial("localhost")
 	defer session.Close();
 
@@ -59,7 +61,7 @@ func getAccidentPosition(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 	dataOut, _ := json.Marshal(accident)
-	fmt.Println("Get Data Called from :")
+	fmt.Println("Get Data Called from :",ip)
 	fmt.Fprintf(w, "%s", string(dataOut))
 	
 }
