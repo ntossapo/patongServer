@@ -30,6 +30,74 @@ type RouteReq struct{
 	DestLong float64	`bson:"destlong 	json:"destlong"`
 }
 
+type GoogleRoute struct {
+	Routes []struct {
+		Bounds struct {
+			Northeast struct {
+				Lat float64 `json:"lat"`
+				Lng float64 `json:"lng"`
+			} `json:"northeast"`
+			Southwest struct {
+				Lat float64 `json:"lat"`
+				Lng float64 `json:"lng"`
+			} `json:"southwest"`
+		} `json:"bounds"`
+		Copyrights string `json:"copyrights"`
+		Legs       []struct {
+			Distance struct {
+				Text  string  `json:"text"`
+				Value float64 `json:"value"`
+			} `json:"distance"`
+			Duration struct {
+				Text  string  `json:"text"`
+				Value float64 `json:"value"`
+			} `json:"duration"`
+			EndAddress  string `json:"end_address"`
+			EndLocation struct {
+				Lat float64 `json:"lat"`
+				Lng float64 `json:"lng"`
+			} `json:"end_location"`
+			StartAddress  string `json:"start_address"`
+			StartLocation struct {
+				Lat float64 `json:"lat"`
+				Lng float64 `json:"lng"`
+			} `json:"start_location"`
+			Steps []struct {
+				Distance struct {
+					Text  string  `json:"text"`
+					Value float64 `json:"value"`
+				} `json:"distance"`
+				Duration struct {
+					Text  string  `json:"text"`
+					Value float64 `json:"value"`
+				} `json:"duration"`
+				EndLocation struct {
+					Lat float64 `json:"lat"`
+					Lng float64 `json:"lng"`
+				} `json:"end_location"`
+				HtmlInstructions string `json:"html_instructions"`
+				Polyline         struct {
+					Points string `json:"points"`
+				} `json:"polyline"`
+				StartLocation struct {
+					Lat float64 `json:"lat"`
+					Lng float64 `json:"lng"`
+				} `json:"start_location"`
+				TravelMode string `json:"travel_mode"`
+			} `json:"steps"`
+			ViaWaypoint []interface{} `json:"via_waypoint"`
+		} `json:"legs"`
+		OverviewPolyline struct {
+			Points string `json:"points"`
+		} `json:"overview_polyline"`
+		Summary       string        `json:"summary"`
+		Warnings      []interface{} `json:"warnings"`
+		WaypointOrder []interface{} `json:"waypoint_order"`
+	} `json:"routes"`
+	Status string `json:"status"`
+}
+
+
 func FloatToString(inputFloat float64) string{
 	return strconv.FormatFloat(inputFloat, 'f', 6, 64)
 }
@@ -111,7 +179,14 @@ func getBestPath(w http.ResponseWriter, r *http.Request){
 	res, _ := http.Get(url)
 	defer res.Body.Close()
 	content, _ := ioutil.ReadAll(res.Body)
-	fmt.Fprintf(w, "%s", string(content))
+
+	var googleRoute GoogleRoute
+
+	if err := json.Unmarshal([]byte(content), &googleRoute) ; err != nil{
+		panic(err)
+	}
+
+	fmt.Fprintf(w, "%d", len(googleRoute.Routes))
 
 }
 
