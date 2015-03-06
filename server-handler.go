@@ -9,6 +9,8 @@ import(
 	"gopkg.in/mgo.v2"
     "gopkg.in/mgo.v2/bson"
     "net"
+    "strings"
+    "io/ioutil"
 )
 
 type Accident struct{
@@ -19,6 +21,17 @@ type Accident struct{
 	Tel string			`bson:"tel" json:"tel"`
 	Desc string			`bson:"desc" json:"desc"`
 	DateTime string		`bson:"dateTime" json:"dateTime"`
+}
+
+type RouteReq struct{
+	oriLat float64		`bson:"orilat" json:"orilat"`
+	oriLong float64		`bson:"orilong" json:"orilong"`
+	destLat float64		`bson:"destlat" json:"destlat"`
+	destLong float64	`bson:"destlong json:"destlong"`
+}
+
+func FloatToString(inputFloat float64) string{
+	return strconv.FormatFloat(inputFloat, 'f', 6, 64)
 }
 
 func addAccidentPosition(w http.ResponseWriter, r *http.Request){
@@ -66,9 +79,43 @@ func getAccidentPosition(w http.ResponseWriter, r *http.Request) {
 	
 }
 
+func getBestPath(w http.ResponseWriter, r *http.Request){
+	/*stringOriginLat := r.FormValue("oriLat");
+	stringOriginLong  := r.FormValue("oriLong");
+	stringDestLat := r.FormValue("destLat");
+	stringDestLong := r.FormValue("destLong");*/
+
+	stringReqParam := r.FormValue("data")
+	var reqParam RouteReq
+	err := json.Unmarshal([]byte(stringReqParam), &reqParam)
+	if err != nil { return }
+		
+	stringBuilder := []string{}
+	stringBuilder = append(stringBuilder, "http://maps.googleapis.com/maps/api/directions/json")
+	stringBuilder = append(stringBuilder, "?origin=")
+	stringBuilder = append(stringBuilder, FloatToString(reqParam.oriLat))
+	stringBuilder = append(stringBuilder, ",")
+	stringBuilder = append(stringBuilder, FloatToString(reqParam.oriLong))
+	stringBuilder = append(stringBuilder, "&destination=")
+	stringBuilder = append(stringBuilder, FloatToString(reqParam.destLat))
+	stringBuilder = append(stringBuilder, ",")
+	stringBuilder = append(stringBuilder, FloatToString(reqParam.destLong))
+	stringBuilder = append(stringBuilder, "&sensor=false&mode=driving&alternatives=true")
+	
+	url := strings.Join(stringBuilder,"")
+	fmt.Println("get route url : " + url)
+
+	res, _ := http.Get(url)
+	defer res.Body.Close()
+	content, _ := ioutil.ReadAll(res.Body)
+	fmt.Fprintf(w, "%s", string(content))
+
+}
+
 func main() {
 	fmt.Println("Server Start @ port", 8080)
 	http.HandleFunc("/add", addAccidentPosition)
 	http.HandleFunc("/get", getAccidentPosition)
+	http.HandleFunc("/route", getBestPath)
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }	
