@@ -14,20 +14,20 @@ import(
 )
 
 type Accident struct{
-	Lat float64			`bson:"lat" json:"lat"`
-	Lng float64			`bson:"lng" json:"lng"`
-	Atype string			`bson:"atype" json:"atype"`
-	Name string			`bson:"name" json:"name"`
-	Tel string			`bson:"tel" json:"tel"`
-	Desc string			`bson:"desc" json:"desc"`
-	DateTime string		`bson:"dateTime" json:"dateTime"`
+	Lat float64			`bson:"lat" 		json:"lat"`
+	Lng float64			`bson:"lng" 		json:"lng"`
+	Atype string		`bson:"atype" 		json:"atype"`
+	Name string			`bson:"name" 		json:"name"`
+	Tel string			`bson:"tel" 		json:"tel"`
+	Desc string			`bson:"desc" 		json:"desc"`
+	DateTime string		`bson:"dateTime" 	json:"dateTime"`
 }
 
 type RouteReq struct{
-	oriLat float64		`bson:"orilat" json:"orilat"`
-	oriLong float64		`bson:"orilong" json:"orilong"`
-	destLat float64		`bson:"destlat" json:"destlat"`
-	destLong float64	`bson:"destlong json:"destlong"`
+	OriLat float64		`bson:"orilat" 		json:"orilat"`
+	OriLong float64		`bson:"orilong" 	json:"orilong"`
+	DestLat float64		`bson:"destlat" 	json:"destlat"`
+	DestLong float64	`bson:"destlong 	json:"destlong"`
 }
 
 func FloatToString(inputFloat float64) string{
@@ -86,20 +86,23 @@ func getBestPath(w http.ResponseWriter, r *http.Request){
 	stringDestLong := r.FormValue("destLong");*/
 
 	stringReqParam := r.FormValue("data")
-	var reqParam RouteReq
-	err := json.Unmarshal([]byte(stringReqParam), &reqParam)
-	if err != nil { return }
+	reqParam := &RouteReq{}
+	if err := json.Unmarshal([]byte(stringReqParam), &reqParam) ; err != nil {
+		panic(err)
+	}
+
+	fmt.Println(reqParam.OriLat)
 		
 	stringBuilder := []string{}
 	stringBuilder = append(stringBuilder, "http://maps.googleapis.com/maps/api/directions/json")
 	stringBuilder = append(stringBuilder, "?origin=")
-	stringBuilder = append(stringBuilder, FloatToString(reqParam.oriLat))
+	stringBuilder = append(stringBuilder, FloatToString(reqParam.OriLat))
 	stringBuilder = append(stringBuilder, ",")
-	stringBuilder = append(stringBuilder, FloatToString(reqParam.oriLong))
+	stringBuilder = append(stringBuilder, FloatToString(reqParam.OriLong))
 	stringBuilder = append(stringBuilder, "&destination=")
-	stringBuilder = append(stringBuilder, FloatToString(reqParam.destLat))
+	stringBuilder = append(stringBuilder, FloatToString(reqParam.DestLat))
 	stringBuilder = append(stringBuilder, ",")
-	stringBuilder = append(stringBuilder, FloatToString(reqParam.destLong))
+	stringBuilder = append(stringBuilder, FloatToString(reqParam.DestLong))
 	stringBuilder = append(stringBuilder, "&sensor=false&mode=driving&alternatives=true")
 	
 	url := strings.Join(stringBuilder,"")
