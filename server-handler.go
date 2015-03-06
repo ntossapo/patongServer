@@ -30,6 +30,11 @@ type RouteReq struct{
 	DestLong float64	`bson:"destlong 	json:"destlong"`
 }
 
+type Position struct{
+	Lat float64
+	Long float64
+}
+
 type GoogleRoute struct {
 	Routes []struct {
 		Bounds struct {
@@ -186,8 +191,63 @@ func getBestPath(w http.ResponseWriter, r *http.Request){
 		panic(err)
 	}
 
-	fmt.Fprintf(w, "%d", len(googleRoute.Routes))
+	for i, j := range googleRoute.Routes{
+		result := DecodingPloyline(j.OverviewPolyline.Points)
+		fmt.Fprintf(w, "%d===================\n", i)
+		for l, k := range result {
+			fmt.Fprintf(w, "%d : %f, %f\n", l, k.Lat, k.Long)
+		}
+		fmt.Fprintf(w, "===================\n")
+	}
+}
 
+func DecodingPloyline(polylineString string) []Position{
+	var abResult []Position
+	index := 0
+	len := len(polylineString)
+	lat := 0
+	lng := 0
+
+	for ; index < len; {
+		var b int
+		var shift uint
+		var result int
+		for ; true ; {
+			b = int(polylineString[index]) - 63;
+			index++
+			result |= (b & 0x1f) << shift
+			shift += 5
+			if !(b >= 0x20) {break}
+		}
+		var dlat int
+		if (result & 1) != 0{
+			dlat = ^(result >> 1)
+		}else{
+			dlat = (result >> 1)
+		}
+		lat += dlat
+
+		shift = 0
+		result = 0
+		for ; true ; {
+			b = int(polylineString[index]) - 63;
+			index++
+			result |= (b & 0x1f) << shift;
+			shift += 5;
+			if !(b >= 0x20) {break}
+		}
+		var dlng int
+		if (result & 1) != 0 {
+			dlng = ^(result >> 1)
+		}else{
+			dlng = (result >> 1)
+		}
+		lng += dlng
+		
+		abResult = append(abResult, Position{float64(lat)/1E5, float64(lng)/1E5})
+	}
+
+	return abResult
 }
 
 func main() {
