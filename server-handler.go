@@ -13,10 +13,10 @@ import(
     "io/ioutil"
 )
 
-type Accident struct{
+type Event struct{
 	Lat float64			`bson:"lat" 		json:"lat"`
 	Lng float64			`bson:"lng" 		json:"lng"`
-	Atype string		`bson:"atype" 		json:"atype"`
+	Type string		`bson:"atype" 		json:"atype"`
 	Name string			`bson:"name" 		json:"name"`
 	Tel string			`bson:"tel" 		json:"tel"`
 	Desc string			`bson:"desc" 		json:"desc"`
@@ -102,103 +102,70 @@ type GoogleRoute struct {
 	Status string `json:"status"`
 }
 
+const(
+	_Loopback = "localhost"
+	_Database = "patong"
+	_Collection = "accident"
+
+	_LatRq = "lat"
+	_LngRq = "long"
+	_ATypeRq = "aType"
+	_NameRq = "name"
+	_TelRq = "tel"
+	_DesRq = "desc"
+	_DTRq = "dateTime"
+
+)
+
 
 func FloatToString(inputFloat float64) string{
 	return strconv.FormatFloat(inputFloat, 'f', 6, 64)
 }
 
-func addAccidentPosition(w http.ResponseWriter, r *http.Request){
-	lat, _ := strconv.ParseFloat(r.FormValue("lat"), 32)
-	lng, _ := strconv.ParseFloat(r.FormValue("lng"), 32)
-	aType := r.FormValue("aType")
-	name := r.FormValue("name")
-	tel := r.FormValue("tel")
-	desc := r.FormValue("desc")
-	dateTime := r.FormValue("dateTime")
+func StringToFloat(s string) float64{
+	result, err := strconv.ParseFloat(s, 64)
+	ErrorHandler(err)
+	return result
+}
 
-	session, err := mgo.Dial("localhost")
+func extractDataFromRequest(r *http.Request) Event{
+	return Event{
+		StringToFloat(r.FormValue(_LatRq)),
+		StringToFloat(r.FormValue(_LngRq)),
+	  	r.FormValue(_ATypeRq),
+	  	r.FormValue(_NameRq),
+	  	r.FormValue(_TelRq),
+	  	r.FormValue(_DesRq),
+	  	r.FormValue(_DTRq)}
+}
+
+func ErrorHandler(err error){
 	if err != nil{
 		panic(err)
 	}
+}
+
+func mongoDial() *mgo.Session{
+	session, err := mgo.Dial(_Loopback)
+	ErrorHandler(err)
 	defer session.Close()
-
 	session.SetMode(mgo.Monotonic, true)
-	c := session.DB("patong").C("accident")
-	err = c.Insert(&Accident{lat, lng, aType, name, tel, desc, dateTime})
-
-	if err != nil{
-		log.Fatal(err)
-	}
-
-	fmt.Printf("add new accident \n{lat : %f, long : %f, aType : %d , name : \"%s\" , tel : \"%s\" , desc : \"%s\" dateTime : \"%s\"}\n", lat, lng, aType, name, tel, desc, dateTime)
-	bolResult, _ := json.Marshal(true)
-	fmt.Fprintf(w, "%s", string(bolResult))
+	return session
 }
 
-func getAccidentPosition(w http.ResponseWriter, r *http.Request) {
-	var accident []Accident
-	ip ,_ ,_ := net.SplitHostPort(r.RemoteAddr)
-	session, err := mgo.Dial("localhost")
-	defer session.Close();
-
-	c := session.DB("patong").C("accident")
-	err = c.Find(bson.M{}).All(&accident)
-	if err != nil{
-		panic(err)
-	}
-	dataOut, _ := json.Marshal(accident)
-	fmt.Println("Get Data Called from :",ip)
-	fmt.Fprintf(w, "%s", string(dataOut))
-	
+func getMongoCollection(s *mgo.Session) *mgo.Collection{
+	return (*s).DB(_Database).C(_Collection)
 }
 
-func getBestPath(w http.ResponseWriter, r *http.Request){
-	/*stringOriginLat := r.FormValue("oriLat");
-	stringOriginLong  := r.FormValue("oriLong");
-	stringDestLat := r.FormValue("destLat");
-	stringDestLong := r.FormValue("destLong");*/
+func printJsonBool(w *http.ResponseWriter, b bool){
+	result, err := json.Marshal(true)
+	ErrorHandler(err)
+	fmt.Fprintf(*w, "%s", string(result))
+}
 
-	stringReqParam := r.FormValue("data")
-	reqParam := &RouteReq{}
-	if err := json.Unmarshal([]byte(stringReqParam), &reqParam) ; err != nil {
-		panic(err)
-	}
-
-	fmt.Println(reqParam.OriLat)
-		
-	stringBuilder := []string{}
-	stringBuilder = append(stringBuilder, "http://maps.googleapis.com/maps/api/directions/json")
-	stringBuilder = append(stringBuilder, "?origin=")
-	stringBuilder = append(stringBuilder, FloatToString(reqParam.OriLat))
-	stringBuilder = append(stringBuilder, ",")
-	stringBuilder = append(stringBuilder, FloatToString(reqParam.OriLong))
-	stringBuilder = append(stringBuilder, "&destination=")
-	stringBuilder = append(stringBuilder, FloatToString(reqParam.DestLat))
-	stringBuilder = append(stringBuilder, ",")
-	stringBuilder = append(stringBuilder, FloatToString(reqParam.DestLong))
-	stringBuilder = append(stringBuilder, "&sensor=false&mode=driving&alternatives=true")
-	
-	url := strings.Join(stringBuilder,"")
-	fmt.Println("get route url : " + url)
-
-	res, _ := http.Get(url)
-	defer res.Body.Close()
-	content, _ := ioutil.ReadAll(res.Body)
-
-	var googleRoute GoogleRoute
-
-	if err := json.Unmarshal([]byte(content), &googleRoute) ; err != nil{
-		panic(err)
-	}
-
-	for i, j := range googleRoute.Routes{
-		result := DecodingPloyline(j.OverviewPolyline.Points)
-		fmt.Fprintf(w, "%d===================\n", i)
-		for l, k := range result {
-			fmt.Fprintf(w, "%d : %f, %f\n", l, k.Lat, k.Long)
-		}
-		fmt.Fprintf(w, "===================\n")
-	}
+func getIP(r *http.Request) string{
+	result, _, _ := net.SplitHostPort(r.RemoteAddr)
+	return result
 }
 
 func DecodingPloyline(polylineString string) []Position{
@@ -250,10 +217,109 @@ func DecodingPloyline(polylineString string) []Position{
 	return abResult
 }
 
+func ProgramLabel(){
+	fmt.Println("Fire Engine Navigation System Version 0.1")
+	fmt.Println("[MAIN] -> Server Start @ port", 8080)
+}
+
+func BuildApiUrl(r *RouteReq) string{
+	stringBuilder := []string{}
+	stringBuilder = append(stringBuilder, "http://maps.googleapis.com/maps/api/directions/json")
+	stringBuilder = append(stringBuilder, "?origin=")
+	stringBuilder = append(stringBuilder, FloatToString(r.OriLat))
+	stringBuilder = append(stringBuilder, ",")
+	stringBuilder = append(stringBuilder, FloatToString(r.OriLong))
+	stringBuilder = append(stringBuilder, "&destination=")
+	stringBuilder = append(stringBuilder, FloatToString(r.DestLat))
+	stringBuilder = append(stringBuilder, ",")
+	stringBuilder = append(stringBuilder, FloatToString(r.DestLong))
+	stringBuilder = append(stringBuilder, "&sensor=false&mode=driving&alternatives=true")
+	return strings.Join(stringBuilder,"")
+}
+
+/**
+	MAIN AND ROUTING FUNCTION
+**/
 func main() {
-	fmt.Println("Server Start @ port", 8080)
+	ProgramLabel()
+	Rounting()
+	log.Fatal(http.ListenAndServe(":8080", nil))
+}	
+
+func Rounting(){
 	http.HandleFunc("/add", addAccidentPosition)
 	http.HandleFunc("/get", getAccidentPosition)
 	http.HandleFunc("/route", getBestPath)
-	log.Fatal(http.ListenAndServe(":8080", nil))
-}	
+}
+
+func getAccidentPosition(w http.ResponseWriter, r *http.Request) {
+	var List []Event
+	ip := getIP(r)
+	
+	session := mongoDial()
+	collection := getMongoCollection(session)
+
+	err := collection.Find(bson.M{}).All(&List)
+	ErrorHandler(err)
+
+	result, _ := json.Marshal(List)
+
+	fmt.Println("\t[LOG] -> Get Data Called from :",ip)
+	fmt.Fprintf(w, "%s", string(result))
+	
+}
+
+func getBestPath(w http.ResponseWriter, r *http.Request){
+
+	stringReqParam := r.FormValue("data")
+	reqParam := &RouteReq{}
+
+	err := json.Unmarshal([]byte(stringReqParam), &reqParam)
+	ErrorHandler(err)
+
+	url := BuildApiUrl(reqParam)
+
+	fmt.Println("\t[LOG] -> get route url : " + url)
+
+	res,err := http.Get(url)
+	ErrorHandler(err)
+	defer res.Body.Close()
+
+	content, err := ioutil.ReadAll(res.Body)
+	ErrorHandler(err)
+
+	var googleRoute GoogleRoute
+	json.Unmarshal([]byte(content), &googleRoute)
+	ErrorHandler(err)
+
+	/* show all route
+	for i, j := range googleRoute.Routes{
+		result := DecodingPloyline(j.OverviewPolyline.Points)
+		fmt.Fprintf(w, "%d===================\n", i)
+		for l, k := range result {
+			fmt.Fprintf(w, "%d : %f, %f\n", l, k.Lat, k.Long)
+		}
+		fmt.Fprintf(w, "===================\n")
+	}
+	*/
+}
+
+
+func addAccidentPosition(w http.ResponseWriter, r *http.Request){
+	event := extractDataFromRequest(r)
+	session := mongoDial()
+	collection := getMongoCollection(session)
+	err := collection.Insert(&event)
+	ErrorHandler(err);
+
+	fmt.Printf("\t[LOG] -> add new accident \n{lat : %f, long : %f, aType : %d , name : \"%s\" ,tel : \"%s\" , desc : \"%s\" dateTime : \"%s\"}\n",
+		event.Lat,
+		event.Lng,
+		event.Type,
+		event.Name,
+		event.Tel,
+		event.Desc,
+		event.DateTime)
+
+	printJsonBool(&w, true)
+}
