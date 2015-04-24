@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+    <meta charset="utf-8">
+    <script src="http://code.jquery.com/jquery-1.9.1.min.js"></script>
+    <!--script type="text/javascript"
+               src="http://ajax.googleapis.com/ajax/libs/jquery/1.3.2/jquery.min.js">
+             </script-->
+    <title>Simple Polylines</title>
+    <style>
+      html, body, #map-canvas {
+        height: 100%;
+        margin: 0px;
+        padding: 0px
+      }
+    </style>
+    <script src="https://maps.googleapis.com/maps/api/js?v=3.exp&sensor=false&libraries=geometry"></script>
+    <script>
+// This example creates a 2-pixel-wide red polyline showing
+// the path of William Kingsford Smith's first trans-Pacific flight between
+// Oakland, CA, and Brisbane, Australia.
+
+var map;
+var markers = [];
+var paths = [];
+function initialize() {
+  var mapOptions = {
+    zoom: 15,
+    center: new google.maps.LatLng(7.8964459, 98.35116819),
+    mapTypeId: google.maps.MapTypeId.TERRAIN
+  };
+
+  map = new google.maps.Map(document.getElementById('map-canvas'),
+      mapOptions);
+
+}
+
+$(document).ready(function() {
+  setInterval("delay()", 5000);
+});
+
+function delay(){
+  deleteMarkers(null);
+  removeLine();
+  $.get("http://127.0.0.1:8081/point",  function(data) {
+    console.log(data);
+    var obj = jQuery.parseJSON(data);
+    if(obj == null)
+      return;
+    for(var i=0; i < obj.length; i++){
+      var marker = new google.maps.Marker({
+        position: new google.maps.LatLng(obj[i]["Lat"], obj[i]["Long"]),
+        map: map,
+      });
+      markers.push(marker);
+    }
+  });
+
+  $.get("http://127.0.0.1:8081/path",  function(data) {
+    console.log("path" + data);
+    var obj = jQuery.parseJSON(data);
+    Path = new google.maps.Polyline({
+      path: google.maps.geometry.encoding.decodePath(obj["Cpath"]),
+      geodesic: true,
+      strokeColor: '#FF0000',
+      strokeOpacity: 1.0,
+    scripttrokeWeight: 5
+    });
+    paths.push(Path)
+    Path.setMap(map)
+  });
+}
+
+function removeLine() {
+  for (i=0; i<paths.length; i++) 
+  {                           
+    paths[i].setMap(null); //or line[i].setVisible(false);
+  }
+  paths = [];
+}
+
+function setAllMap(map) {
+  for (var i = 0; i < markers.length; i++) {
+    markers[i].setMap(map);
+  }
+}
+
+function clearMarkers() {
+  setAllMap(null);
+}
+
+function deleteMarkers() {
+  clearMarkers();
+  markers = [];
+}
+
+google.maps.event.addDomListener(window, 'load', initialize);
+    </script>
+  </head>
+  <body>
+    <div id="map-canvas"></div>
+  </body>
+</html>
