@@ -14,9 +14,8 @@ import(
 )
 
 type Event struct{
-	Lat float64			`bson:"lat" 		json:"lat"`
-	Lng float64			`bson:"lng" 		json:"lng"`
-	Type string		`bson:"atype" 		json:"atype"`
+	Pos Position 		`bson:"pos"			json:"pos"`
+	Type string			`bson:"atype" 		json:"atype"`
 	Name string			`bson:"name" 		json:"name"`
 	Tel string			`bson:"tel" 		json:"tel"`
 	Desc string			`bson:"desc" 		json:"desc"`
@@ -24,15 +23,17 @@ type Event struct{
 }
 
 type RouteReq struct{
-	OriLat float64		`bson:"orilat" 		json:"orilat"`
-	OriLong float64		`bson:"orilong" 	json:"orilong"`
-	DestLat float64		`bson:"destlat" 	json:"destlat"`
-	DestLong float64	`bson:"destlong 	json:"destlong"`
+	Origin	Position    `bson:"origin"		json:"origin"`
+	Destination Position`bson:"destination"	json:"destination"`
 }
 
 type Position struct{
-	Lat float64
-	Long float64
+	Lat float64			`bson:"lat"			json:"lat"`
+	Long float64		`bson:"long"		json:"long"`
+}
+
+type Block struct{
+	Pos Position 		`bson:"position"			json:"position"`
 }
 
 type GoogleRoute struct {
@@ -104,8 +105,8 @@ type GoogleRoute struct {
 
 const(
 	_Loopback = "localhost"
+	_MGOSERVER = _Loopback
 	_Database = "patong"
-	_Collection = "accident"
 
 	_LatRq = "lat"
 	_LngRq = "long"
@@ -130,8 +131,9 @@ func StringToFloat(s string) float64{
 
 func extractDataFromRequest(r *http.Request) Event{
 	return Event{
-		StringToFloat(r.FormValue(_LatRq)),
-		StringToFloat(r.FormValue(_LngRq)),
+		Position{
+			StringToFloat(r.FormValue(_LatRq)),
+			StringToFloat(r.FormValue(_LngRq))},
 	  	r.FormValue(_ATypeRq),
 	  	r.FormValue(_NameRq),
 	  	r.FormValue(_TelRq),
@@ -145,16 +147,8 @@ func ErrorHandler(err error){
 	}
 }
 
-func mongoDial() *mgo.Session{
-	session, err := mgo.Dial(_Loopback)
-	ErrorHandler(err)
-	defer session.Close()
-	session.SetMode(mgo.Monotonic, true)
-	return session
-}
-
-func getMongoCollection(s *mgo.Session) *mgo.Collection{
-	return (*s).DB(_Database).C(_Collection)
+func getMongoCollection(s *mgo.Session, cname string) *mgo.Collection{
+	return (*s).DB(_Database).C(cname)
 }
 
 func printJsonBool(w *http.ResponseWriter, b bool){
@@ -226,13 +220,13 @@ func BuildApiUrl(r *RouteReq) string{
 	stringBuilder := []string{}
 	stringBuilder = append(stringBuilder, "http://maps.googleapis.com/maps/api/directions/json")
 	stringBuilder = append(stringBuilder, "?origin=")
-	stringBuilder = append(stringBuilder, FloatToString(r.OriLat))
+	stringBuilder = append(stringBuilder, FloatToString(r.Origin.Lat))
 	stringBuilder = append(stringBuilder, ",")
-	stringBuilder = append(stringBuilder, FloatToString(r.OriLong))
+	stringBuilder = append(stringBuilder, FloatToString(r.Origin.Long))
 	stringBuilder = append(stringBuilder, "&destination=")
-	stringBuilder = append(stringBuilder, FloatToString(r.DestLat))
+	stringBuilder = append(stringBuilder, FloatToString(r.Destination.Lat))
 	stringBuilder = append(stringBuilder, ",")
-	stringBuilder = append(stringBuilder, FloatToString(r.DestLong))
+	stringBuilder = append(stringBuilder, FloatToString(r.Destination.Long))
 	stringBuilder = append(stringBuilder, "&sensor=false&mode=driving&alternatives=true")
 	return strings.Join(stringBuilder,"")
 }
@@ -250,29 +244,55 @@ func Rounting(){
 	http.HandleFunc("/add", addAccidentPosition)
 	http.HandleFunc("/get", getAccidentPosition)
 	http.HandleFunc("/route", getBestPath)
+	http.HandleFunc("/block", addBlock)
+	http.HandleFunc("/allblock", getBlock)
 }
 
 func getAccidentPosition(w http.ResponseWriter, r *http.Request) {
-	var List []Event
+	var list []Event
 	ip := getIP(r)
-	
-	session := mongoDial()
-	collection := getMongoCollection(session)
 
-	err := collection.Find(bson.M{}).All(&List)
+	session, err := mgo.Dial(_Loopback)
+	ErrorHandler(err)
+	defer session.Close()
+
+	collection := getMongoCollection(session, "event")
+
+	collection.Find(bson.M{}).All(&list)
 	ErrorHandler(err)
 
-	result, _ := json.Marshal(List)
+	result, _ := json.Marshal(list)
 
-	fmt.Println("\t[LOG] -> Get Data Called from :",ip)
+	fmt.Println("\t[LOG] -> Get All Event Called from :",ip)
 	fmt.Fprintf(w, "%s", string(result))
 	
 }
 
+func getBlock(w http.ResponseWriter, r *http.Request){
+	var list []Block
+	ip := getIP(r)
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept")
+	session, err := mgo.Dial(_Loopback)
+	ErrorHandler(err)
+	defer session.Close()
+
+	collection := getMongoCollection(session, "block")
+	collection.Find(bson.M{}).All(&list)
+	ErrorHandler(err)
+
+	result, _ := json.Marshal(list)
+	fmt.Println("\t[LOG] -> Get All Block Called from :",ip)
+	fmt.Fprintf(w, "%s", string(result))
+}
+
+//{"origin":{"lat":?, "long":?}, "destination":{"lat":?, "long":?}}
 func getBestPath(w http.ResponseWriter, r *http.Request){
 
 	stringReqParam := r.FormValue("data")
 	reqParam := &RouteReq{}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8r")
 
 	err := json.Unmarshal([]byte(stringReqParam), &reqParam)
 	ErrorHandler(err)
@@ -290,31 +310,82 @@ func getBestPath(w http.ResponseWriter, r *http.Request){
 
 	var googleRoute GoogleRoute
 	json.Unmarshal([]byte(content), &googleRoute)
-	ErrorHandler(err)
 
-	/* show all route
-	for i, j := range googleRoute.Routes{
-		result := DecodingPloyline(j.OverviewPolyline.Points)
-		fmt.Fprintf(w, "%d===================\n", i)
-		for l, k := range result {
-			fmt.Fprintf(w, "%d : %f, %f\n", l, k.Lat, k.Long)
+	session, err := mgo.Dial(_Loopback)
+	ErrorHandler(err)
+	defer session.Close()
+
+	collection := getMongoCollection(session, "block")
+	end := false
+	pos := Position{}
+
+	fmt.Println("\t[LOG] -> ", "Get Routes " , len(googleRoute.Routes) , " Ways")
+	for c, j := range googleRoute.Routes{
+		if end {
+			break
 		}
-		fmt.Fprintf(w, "===================\n")
+		result := DecodingPloyline(j.OverviewPolyline.Points)
+		size := len(result)
+		for i, k := range result {
+			fmt.Printf("\t[LOG] -> lat:%f-%f, long:%f-%f\n", (k.Lat-0.00005), (k.Lat+0.00005), (k.Long-0.00005), (k.Long+0.00005))
+			found := collection.Find(bson.M{"position.lat":bson.M{"$gt":(k.Lat-0.00005), "$lt":(k.Lat+0.00005)}, "position.long":bson.M{"$gt":(k.Long-0.00005), "$lt":(k.Long+0.00005)}}).One(&pos)
+			if found == nil{
+				fmt.Println("\t[LOG] -> ", k.Lat, ", ", k.Long, " In Range. Next Ways")
+				break
+			}else if i == size-1{
+				fmt.Println("\t[LOG] -> ", c, " is Work!!")
+				fmt.Fprintf(w, "<html>")
+				fmt.Fprintf(w, "<head>")
+				fmt.Fprintf(w, "<META HTTP-EQUIV=\"Refresh\" CONTENT=\"0;URL=http://localhost/map.html?%s\">", j.OverviewPolyline.Points)
+				fmt.Fprintf(w, "</head>")
+				fmt.Fprintf(w, "</html>")
+				end = true
+				break
+			}else if found.Error() == "not found"{
+				continue
+			}
+		}
+		
 	}
-	*/
+	
+}
+
+//{position:{lat:?, long:?}}
+func addBlock(w http.ResponseWriter, r *http.Request){
+	jsonRequestPosition := r.FormValue("position")
+	position := Position{}
+	json.Unmarshal([]byte(jsonRequestPosition), &position)
+	block := Block{position}
+
+	session, err := mgo.Dial(_Loopback)
+	ErrorHandler(err)
+	defer session.Close()
+
+	collection := getMongoCollection(session, "block")
+	collection.Insert(&block);
+	ErrorHandler(err);
+	fmt.Printf("\t[LOG] -> add new block mode 1 {lat:%f, long:%f}\n",
+	 block.Pos.Lat,
+	  block.Pos.Long)
+
+	printJsonBool(&w, true)
 }
 
 
 func addAccidentPosition(w http.ResponseWriter, r *http.Request){
 	event := extractDataFromRequest(r)
-	session := mongoDial()
-	collection := getMongoCollection(session)
-	err := collection.Insert(&event)
+
+	session, err := mgo.Dial(_Loopback)
+	ErrorHandler(err)
+	defer session.Close()
+
+	collection := getMongoCollection(session, "event")
+	collection.Insert(&event)
 	ErrorHandler(err);
 
 	fmt.Printf("\t[LOG] -> add new accident \n{lat : %f, long : %f, aType : %d , name : \"%s\" ,tel : \"%s\" , desc : \"%s\" dateTime : \"%s\"}\n",
-		event.Lat,
-		event.Lng,
+		event.Pos.Lat,
+		event.Pos.Long,
 		event.Type,
 		event.Name,
 		event.Tel,
